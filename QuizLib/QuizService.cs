@@ -25,6 +25,20 @@ public class QuizService
         await File.WriteAllTextAsync("QuizResults.json", JsonConvert.SerializeObject(QuizResults));
     }
 
+    public string? getLoginById(int id)
+    {
+        string usersJSON = File.ReadAllText("users.json");
+        User[] users = JsonConvert.DeserializeObject<User[]>(usersJSON) ?? [];
+
+        foreach (var user in users)
+        {
+            if (user.Id == id) return user.Login;
+        }
+
+        return null;
+    }
+
+
     public bool ContainsUser(string login)
     {
         string usersJSON = File.ReadAllText("users.json");
@@ -56,7 +70,7 @@ public class QuizService
         User? user = findUser(login);
 
         if (user == null) throw new UserNotFound();
-        else if (user.Password != login) return false;
+        else if (user.Password != password) return false;
 
         LoginedUser = user;
         IsLogined = true;
@@ -69,9 +83,10 @@ public class QuizService
         if (ContainsUser(login)) throw new UserAlreadyExist();
 
         string usersJSON = File.ReadAllText("users.json");
-        User[] users = JsonConvert.DeserializeObject<User[]>(usersJSON) ?? [];
+        List<User> users = JsonConvert.DeserializeObject<List<User>>(usersJSON) ?? [];
 
-        await File.WriteAllTextAsync("users.json", JsonConvert.SerializeObject(users.Append<User>(new User() { Id = users.Last().Id + 1, Login = login, Password = password, Birthday = birthday })));
+        int id = users.Count > 0 ? users.Last().Id + 1 : 1;
+        await File.WriteAllTextAsync("users.json", JsonConvert.SerializeObject(users.Append<User>(new User() { Id = id, Login = login, Password = password, Birthday = birthday })));
 
         return true;
     }
@@ -112,18 +127,22 @@ public class QuizService
                 {
                     QuizResult.Results.Remove(res);
                     QuizResult.Results.Add(new UserResult() { UserId = LoginedUser.Id, Score = score });
-                    return QuizResult.Results.OrderByDescending(result => result.Score).ToList().IndexOf(new UserResult() { UserId = LoginedUser.Id, Score = score });
+                    await SaveAll();
+                    return QuizResult.Results.OrderByDescending(result => result.Score).ToList().FindIndex(r => r.UserId == LoginedUser.Id);
                 }
                 else
                 {
                     QuizResult.Results.Add(new UserResult() { UserId = LoginedUser.Id, Score = score });
+                    await SaveAll();
                     return QuizResult.Results.OrderByDescending(result => result.Score).ToList().FindIndex(r => r.UserId == LoginedUser.Id);
                 }
             }
         }
 
+        QuizResults.Add(new QuizResult() { QuizId = quizId, Results = new List<UserResult>() {new UserResult() { UserId = LoginedUser.Id, Score = score }} });
+
         await SaveAll();
-        return null;
+        return 0;
     }
 
     // трохи допоміг copilot
