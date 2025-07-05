@@ -9,25 +9,45 @@ public class QuizService
     public List<Quiz> Quizzes { get; private set; } = new List<Quiz>();
     private List<QuizResult> QuizResults { get; set; } = new List<QuizResult>();
 
+
+    private string usersPath { get; set; } = string.Empty;
+    private string adminsPath { get; set; } = string.Empty;
+    private string quizzesPath { get; set; } = string.Empty;
+    private string resultsPath { get; set; } = string.Empty;
+
+
     public QuizService()
     {
-        if (!File.Exists("Users.json")) File.Create("Users.json");
-        if (!File.Exists("Quizzes.json")) File.Create("Quizzes.json");
-        if (!File.Exists("QuizResults.json")) File.Create("QuizResults.json");
+        string folderPath = @"C:\Files\";
 
-        Quizzes = JsonConvert.DeserializeObject<List<Quiz>>(File.ReadAllText("Quizzes.json")) ?? new List<Quiz>();
-        QuizResults = JsonConvert.DeserializeObject<List<QuizResult>>(File.ReadAllText("QuizResults.json")) ?? new List<QuizResult>();
+        if (!Directory.Exists(folderPath))
+        {
+            Directory.CreateDirectory(folderPath);
+        }
+
+        usersPath = $"{folderPath}Users.json";
+        adminsPath = $"{folderPath}Admins.json";
+        quizzesPath = $"{folderPath}Quizzes.json";
+        resultsPath = $"{folderPath}QuizResults.json";
+
+        if (!File.Exists(usersPath)) File.WriteAllText(usersPath, "[]");
+        if (!File.Exists(adminsPath)) File.WriteAllText(adminsPath, "[]");
+        if (!File.Exists(quizzesPath)) File.WriteAllText(quizzesPath, "[]");
+        if (!File.Exists(resultsPath)) File.WriteAllText(resultsPath, "[]");
+
+        Quizzes = JsonConvert.DeserializeObject<List<Quiz>>(File.ReadAllText(quizzesPath)) ?? new List<Quiz>();
+        QuizResults = JsonConvert.DeserializeObject<List<QuizResult>>(File.ReadAllText(resultsPath)) ?? new List<QuizResult>();
     }
 
     private async Task SaveAll()
     {
-        await File.WriteAllTextAsync("Quizzes.json", JsonConvert.SerializeObject(Quizzes));
-        await File.WriteAllTextAsync("QuizResults.json", JsonConvert.SerializeObject(QuizResults));
+        await File.WriteAllTextAsync(quizzesPath, JsonConvert.SerializeObject(Quizzes));
+        await File.WriteAllTextAsync(resultsPath, JsonConvert.SerializeObject(QuizResults));
     }
 
     public string? getLoginById(int id)
     {
-        string usersJSON = File.ReadAllText("users.json");
+        string usersJSON = File.ReadAllText(usersPath);
         User[] users = JsonConvert.DeserializeObject<User[]>(usersJSON) ?? [];
 
         foreach (var user in users)
@@ -41,7 +61,7 @@ public class QuizService
 
     public bool ContainsUser(string login)
     {
-        string usersJSON = File.ReadAllText("users.json");
+        string usersJSON = File.ReadAllText(usersPath);
         User[] users = JsonConvert.DeserializeObject<User[]>(usersJSON) ?? [];
 
         foreach (var user in users)
@@ -54,7 +74,20 @@ public class QuizService
 
     private User? findUser(string login)
     {
-        string usersJSON = File.ReadAllText("users.json");
+        string usersJSON = File.ReadAllText(usersPath);
+        User[] users = JsonConvert.DeserializeObject<User[]>(usersJSON) ?? [];
+
+        foreach (var user in users)
+        {
+            if (user.Login == login) return user;
+        }
+
+        return null;
+    }
+
+    private User? findAdminUser(string login)
+    {
+        string usersJSON = File.ReadAllText(adminsPath);
         User[] users = JsonConvert.DeserializeObject<User[]>(usersJSON) ?? [];
 
         foreach (var user in users)
@@ -78,15 +111,27 @@ public class QuizService
         return true;
     }
 
+    public bool AdminLogin(string login, string password)
+    {
+        User? user = findAdminUser(login);
+
+        if (user == null) throw new UserNotFound();
+        else if (user.Password != password) return false;
+
+        IsLogined = true;
+
+        return true;
+    }
+
     public async Task<bool> Register(string login, string password, DateTime birthday)
     {
         if (ContainsUser(login)) throw new UserAlreadyExist();
 
-        string usersJSON = File.ReadAllText("users.json");
+        string usersJSON = File.ReadAllText(usersPath);
         List<User> users = JsonConvert.DeserializeObject<List<User>>(usersJSON) ?? [];
 
         int id = users.Count > 0 ? users.Last().Id + 1 : 1;
-        await File.WriteAllTextAsync("users.json", JsonConvert.SerializeObject(users.Append<User>(new User() { Id = id, Login = login, Password = password, Birthday = birthday })));
+        await File.WriteAllTextAsync(usersPath, JsonConvert.SerializeObject(users.Append<User>(new User() { Id = id, Login = login, Password = password, Birthday = birthday })));
 
         return true;
     }
@@ -160,6 +205,33 @@ public class QuizService
         return resultsForUser;
     }
 
+    public async Task EditUserBirthday(DateTime newBirthday)
+    {
+        string usersJSON = File.ReadAllText(usersPath);
+        List<User> users = JsonConvert.DeserializeObject<List<User>>(usersJSON) ?? [];
+
+        var user = users.FirstOrDefault(u => u.Id == LoginedUser.Id) ?? new User();
+
+        user.Birthday = newBirthday;
+        LoginedUser.Birthday = newBirthday;
+
+        await File.WriteAllTextAsync(usersPath, JsonConvert.SerializeObject(users));
+    }
+
+    public async Task<bool> EditUserPassword(string newPassword)
+    {
+        string usersJSON = File.ReadAllText(usersPath);
+        List<User> users = JsonConvert.DeserializeObject<List<User>>(usersJSON) ?? [];
+
+        var user = users.FirstOrDefault(u => u.Id == LoginedUser.Id) ?? new User();
+
+        user.Password = newPassword;
+        LoginedUser.Password = newPassword;
+
+        await File.WriteAllTextAsync(usersPath, JsonConvert.SerializeObject(users));
+        return true;
+    }
+
     public async Task CreateQuiz(string title, List<Question> questions)
     {
         int newId = Quizzes.Count > 0 ? Quizzes.Last().Id + 1 : 1;
@@ -168,5 +240,32 @@ public class QuizService
         Quizzes.Add(newQuiz);
 
         await SaveAll();
+    }
+
+    public async Task RemoveQuiz(int quizId)
+    {
+        var quiz = Quizzes.FirstOrDefault(q => q.Id == quizId);
+        if (quiz != null)
+        {
+            Quizzes.Remove(quiz);
+        }
+
+        var qr = QuizResults.FirstOrDefault(r => r.QuizId == quizId);
+        if (qr != null)
+        {
+            QuizResults.Remove(qr);
+        }
+
+        await SaveAll();
+    }
+
+    public async Task<bool> UpdateQuiz(Quiz updatedQuiz)
+    {
+        var index = Quizzes.FindIndex(q => q.Id == updatedQuiz.Id);
+        if (index == -1) return false;
+
+        Quizzes[index] = updatedQuiz;
+        await SaveAll();
+        return true;
     }
 }

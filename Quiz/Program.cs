@@ -40,6 +40,7 @@ internal class Program
                         MyResultsMenu();
                         break;
                     case "3":
+                        await EditUserMenu();
                         break;
                     case "4":
                         break;
@@ -56,11 +57,13 @@ internal class Program
     {
         string authAction = "0";
         List<string> errors = new List<string>();
+        List<string> success = new List<string>();
 
         do
         {
             VisualHelper.PrintTitle("Аунтентифікація");
-            VisualHelper.PrintMenu(["Вхід", "Реєстрація", "Вихід"], null, errors, null);
+            VisualHelper.PrintMenu(["Вхід", "Реєстрація", "Вихід"], null, errors, success);
+            success.Clear();
             errors.Clear();
 
             Console.Write("|   Вибір: ");
@@ -143,6 +146,8 @@ internal class Program
                         {
                             await quizService.Register(login, password, dateTime);
                             authAction = "1";
+                            success.Add("Успішна реєстрація");
+                            break;
                         }
                         catch (UserAlreadyExist)
                         {
@@ -309,4 +314,78 @@ internal class Program
         Console.ReadLine();
     }
 
+    static async Task EditUserMenu()
+    {
+        string action = "0";
+        List<string> errors = new();
+        List<string> success = new();
+
+        do
+        {
+            Console.Clear();
+            VisualHelper.PrintTitle("Редагувати користувача");
+            VisualHelper.PrintMenu(
+                ["Змінити пароль", "Змінити дату народження", "Назад"],
+                null, errors, success);
+            errors.Clear();
+            success.Clear();
+
+            Console.Write("|   Вибір: ");
+            action = Console.ReadLine() ?? "0";
+
+            switch (action)
+            {
+                case "1":
+                    Console.Clear();
+                    VisualHelper.PrintTitle("Зміна пароля");
+                    VisualHelper.PrintMenu(null,
+                        ["Введіть старий та новий пароль", "(0 щоб повернутися)"],
+                        null, null);
+
+                    Console.Write("|   Новий пароль: ");
+                    string newPass = Console.ReadLine() ?? "";
+                    if (newPass == "0") break;
+
+                    bool changed = await quizService.EditUserPassword(newPass);
+                    if (changed)
+                        success.Add("Пароль успішно змінено");
+                    else
+                        errors.Add("Старий пароль невірний");
+                    break;
+
+                case "2":
+                    Console.Clear();
+                    VisualHelper.PrintTitle("Зміна дати народження");
+                    VisualHelper.PrintMenu(null,
+                        ["Формат дд/мм/рррр", "(0 щоб повернутися)"],
+                        null, null);
+
+                    Console.Write("|   Нова дата: ");
+                    string dateStr = Console.ReadLine() ?? "";
+                    if (dateStr == "0") break;
+
+                    if (DateTime.TryParseExact(
+                            dateStr, "dd/MM/yyyy",
+                            CultureInfo.InvariantCulture,
+                            DateTimeStyles.None, out DateTime newDate))
+                    {
+                        await quizService.EditUserBirthday(newDate);
+                        success.Add("Дату народження змінено");
+                    }
+                    else
+                    {
+                        errors.Add("Невірний формат дати");
+                    }
+                    break;
+
+                case "3":
+                    break;
+
+                default:
+                    errors.Add("Невірний пункт меню");
+                    break;
+            }
+        }
+        while (action != "3");
+    }
 }
